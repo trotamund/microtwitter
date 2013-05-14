@@ -11,7 +11,6 @@
 #import <Accounts/Accounts.h>
 #import <Social/Social.h>
 
-#import <RestKit.h>
 #import <AFNetworking.h>
 #import <MBProgressHUD/MBProgressHUD.h>
 
@@ -23,7 +22,6 @@
 
 @interface MasterViewController () {
     NSMutableArray *_objects;
-    RKResponseDescriptor *responseDescriptor;
     
     UIFont *tweetFont;
 }
@@ -45,18 +43,8 @@
         _username = nil;
         
         tweetFont = [UIFont fontWithName:@"HelveticaNeue-Medium" size:13];
-
         
         _accountStore = [[ACAccountStore alloc] init];
-        
-        RKObjectMapping *mapping = [RKObjectMapping mappingForClass:[Tweet class]];
-        [mapping addAttributeMappingsFromDictionary:@{
-         @"user.name":   @"username",
-         @"user.id":     @"userID",
-         @"text":        @"text"
-         }];
-        
-        responseDescriptor = [RKResponseDescriptor responseDescriptorWithMapping:mapping pathPattern:nil keyPath:nil statusCodes:nil];
 
     }
     return self;
@@ -64,13 +52,7 @@
 							
 - (void)viewDidLoad
 {
-    [super viewDidLoad];
-	// Do any additional setup after loading the view, typically from a nib.
-//    self.navigationItem.leftBarButtonItem = self.editButtonItem;
-//
-//    UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
-//    self.navigationItem.rightBarButtonItem = addButton;
-    
+    [super viewDidLoad];    
     
     self.navigationController.view.layer.cornerRadius = 10;
     self.navigationController.view.layer.masksToBounds = YES;
@@ -141,40 +123,8 @@
     Tweet *tweet = _user.tweets[indexPath.row];
     NSString *text = tweet.text;
     
-    return [TweetCell calculateHeightForText:text]; //MAX(height, 70);//
+    return [TweetCell calculateHeightForText:text];
 }
-
-//- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath
-//{
-//    // Return NO if you do not want the specified item to be editable.
-//    return YES;
-//}
-//
-//- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath
-//{
-//    if (editingStyle == UITableViewCellEditingStyleDelete) {
-//        [_objects removeObjectAtIndex:indexPath.row];
-//        [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
-//    } else if (editingStyle == UITableViewCellEditingStyleInsert) {
-//        // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view.
-//    }
-//}
-
-/*
-// Override to support rearranging the table view.
-- (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)fromIndexPath toIndexPath:(NSIndexPath *)toIndexPath
-{
-}
-*/
-
-/*
-// Override to support conditional rearranging of the table view.
-- (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath
-{
-    // Return NO if you do not want the item to be re-orderable.
-    return YES;
-}
-*/
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
@@ -263,14 +213,12 @@
                              }
                              else {
                                  // Our JSON deserialization went awry
-//                                 NSLog(@"JSON Error: %@", [jsonError localizedDescription]);
                                  [self.refreshControl endRefreshing];
                                  [self hideHUD];
                              }
                          }
                          else {
                              // The server did not respond successfully... were we rate-limited?
-//                             NSLog(@"The response status code is %d", urlResponse.statusCode);
                              [self.refreshControl endRefreshing];
                              [self cleanAllView];
                              
@@ -278,7 +226,6 @@
                      }
                      else
                      {
-//                         NSLog(@"error");
                          [self.refreshControl endRefreshing];
                          [self cleanAllView];
                      }
@@ -359,7 +306,6 @@
                                                                                             error:&jsonError];
                              
                              if (timelineData) {
-//                                 NSLog(@"Timeline Response: %@\n", timelineData);
                                  __block NSMutableArray *temp = [NSMutableArray arrayWithCapacity:[timelineData count]];
                                  
                                  [timelineData enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {

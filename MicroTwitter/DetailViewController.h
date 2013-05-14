@@ -8,9 +8,19 @@
 
 #import <UIKit/UIKit.h>
 
+@class User;
+
+
 @interface DetailViewController : UIViewController
 
-@property (strong, nonatomic) id detailItem;
+@property (strong, nonatomic) User *user;
+@property (strong, nonatomic) NSIndexPath *indexPath;
 
-@property (weak, nonatomic) IBOutlet UILabel *detailDescriptionLabel;
+@property (weak, nonatomic) IBOutlet UILabel *tweetLabel;
+@property (weak, nonatomic) IBOutlet UIImageView *userImageView;
+@property (weak, nonatomic) IBOutlet UILabel *usernameLabel;
+@property (weak, nonatomic) IBOutlet UILabel *screenNameLabel;
+
+- (void) setUser:(User *)user tweetIndexPath:(NSIndexPath *)indexPath;
+
 @end

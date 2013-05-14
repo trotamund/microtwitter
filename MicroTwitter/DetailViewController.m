@@ -8,6 +8,11 @@
 
 #import "DetailViewController.h"
 
+#import <AFNetworking/AFNetworking.h>
+
+#import "Models/User.h"
+#import "Models/Tweet.h"
+
 @interface DetailViewController ()
 - (void)configureView;
 @end
@@ -16,22 +21,40 @@
 
 #pragma mark - Managing the detail item
 
-- (void)setDetailItem:(id)newDetailItem
+
+
+- (void)setUser:(User *)user tweetIndexPath:(NSIndexPath *)indexPath
 {
-    if (_detailItem != newDetailItem) {
-        _detailItem = newDetailItem;
-        
-        // Update the view.
-        [self configureView];
-    }
+    self.user = user;
+    self.indexPath = indexPath;
+    
+    [self configureView];
 }
 
 - (void)configureView
 {
     // Update the user interface for the detail item.
 
-    if (self.detailItem) {
-        self.detailDescriptionLabel.text = [self.detailItem description];
+    if (self.user) {
+        self.usernameLabel.text = _user.userName;
+        self.screenNameLabel.text = _user.screenName;
+        
+        Tweet *tweet = _user.tweets[_indexPath.row];
+        self.tweetLabel.text = tweet.text;
+        
+        [self.userImageView setImageWithURL:_user.imageURL];
+        
+        
+        CGSize virtualSize = CGSizeMake(CGRectGetWidth(_tweetLabel.frame), 1000);
+        CGSize size = [tweet.text sizeWithFont:_tweetLabel.font constrainedToSize:virtualSize lineBreakMode:NSLineBreakByWordWrapping];
+        
+        CGRect frame = _tweetLabel.frame;
+        frame.size.height = size.height;
+        
+        _tweetLabel.frame = frame;
+        
+        
+        NSLog(@"%@",self.tweetLabel.text);
     }
 }
 
@@ -39,6 +62,9 @@
 {
     [super viewDidLoad];
 	// Do any additional setup after loading the view, typically from a nib.
+    _userImageView.layer.cornerRadius = 8;
+    _userImageView.layer.masksToBounds = YES;
+    
     [self configureView];
 }
 
@@ -52,7 +78,7 @@
 {
     self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
     if (self) {
-        self.title = NSLocalizedString(@"Detail", @"Detail");
+        self.title = NSLocalizedString(@"Tweet", @"Detail");
     }
     return self;
 }

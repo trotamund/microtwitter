@@ -8,11 +8,29 @@
 
 #import "MasterViewController.h"
 
+#import <Accounts/Accounts.h>
+#import <Social/Social.h>
+
+#import <RestKit.h>
+#import <AFNetworking.h>
+#import <MBProgressHUD/MBProgressHUD.h>
+
 #import "DetailViewController.h"
+#import "Models/Tweet.h"
+#import "Models/User.h"
+#import "ViewControllers/TweetCell.h"
+
 
 @interface MasterViewController () {
     NSMutableArray *_objects;
+    RKResponseDescriptor *responseDescriptor;
+    
+    UIFont *tweetFont;
 }
+
+@property (nonatomic) ACAccountStore *accountStore;
+@property (nonatomic, strong) NSString *username;
+@property (nonatomic, strong) User *user;
 @end
 
 @implementation MasterViewController
@@ -21,7 +39,25 @@
 {
     self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
     if (self) {
-        self.title = NSLocalizedString(@"Master", @"Master");
+        self.title = NSLocalizedString(@"Cuenta", @"Micro Twitter");
+        
+        _user = nil;
+        _username = nil;
+        
+        tweetFont = [UIFont fontWithName:@"HelveticaNeue-Medium" size:13];
+
+        
+        _accountStore = [[ACAccountStore alloc] init];
+        
+        RKObjectMapping *mapping = [RKObjectMapping mappingForClass:[Tweet class]];
+        [mapping addAttributeMappingsFromDictionary:@{
+         @"user.name":   @"username",
+         @"user.id":     @"userID",
+         @"text":        @"text"
+         }];
+        
+        responseDescriptor = [RKResponseDescriptor responseDescriptorWithMapping:mapping pathPattern:nil keyPath:nil statusCodes:nil];
+
     }
     return self;
 }
@@ -30,10 +66,20 @@
 {
     [super viewDidLoad];
 	// Do any additional setup after loading the view, typically from a nib.
-    self.navigationItem.leftBarButtonItem = self.editButtonItem;
-
-    UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
-    self.navigationItem.rightBarButtonItem = addButton;
+//    self.navigationItem.leftBarButtonItem = self.editButtonItem;
+//
+//    UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
+//    self.navigationItem.rightBarButtonItem = addButton;
+    
+    
+    self.navigationController.view.layer.cornerRadius = 10;
+    self.navigationController.view.layer.masksToBounds = YES;
+    
+    UIRefreshControl *refreshControl = [[UIRefreshControl alloc]
+                                        init];
+    [refreshControl addTarget:self action:@selector(fetchTimeline) forControlEvents:UIControlEventValueChanged];
+    self.refreshControl = refreshControl;
+    
 }
 
 - (void)didReceiveMemoryWarning
@@ -61,41 +107,58 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
 {
-    return _objects.count;
+    return _user.tweets.count;
 }
 
 // Customize the appearance of table view cells.
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
 {
-    static NSString *CellIdentifier = @"Cell";
+    static NSString *CellIdentifier = @"TweetCell";
     
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
-    if (cell == nil) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier];
-        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    TweetCell *cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
+    if (!cell) {
+        
+        UINib *theNib = [UINib nibWithNibName:CellIdentifier bundle:nil];
+        cell = [[theNib instantiateWithOwner:self options:nil] objectAtIndex:0];        
     }
 
-
-    NSDate *object = _objects[indexPath.row];
-    cell.textLabel.text = [object description];
+    Tweet *tweet = _user.tweets[indexPath.row];
+    
+    [cell setObjectToShow:tweet user:_user];
+    
+    [cell.userImageView setImageWithURL:_user.imageURL placeholderImage:nil];
     return cell;
 }
 
-- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath
 {
-    // Return NO if you do not want the specified item to be editable.
-    return YES;
+    
+    if (!_user) {
+        return 70;
+    }
+    
+    Tweet *tweet = _user.tweets[indexPath.row];
+    NSString *text = tweet.text;
+    
+    return [TweetCell calculateHeightForText:text]; //MAX(height, 70);//
 }
 
-- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath
-{
-    if (editingStyle == UITableViewCellEditingStyleDelete) {
-        [_objects removeObjectAtIndex:indexPath.row];
-        [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
-    } else if (editingStyle == UITableViewCellEditingStyleInsert) {
-        // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view.
-    }
-}
+//- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath
+//{
+//    // Return NO if you do not want the specified item to be editable.
+//    return YES;
+//}
+//
+//- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath
+//{
+//    if (editingStyle == UITableViewCellEditingStyleDelete) {
+//        [_objects removeObjectAtIndex:indexPath.row];
+//        [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
+//    } else if (editingStyle == UITableViewCellEditingStyleInsert) {
+//        // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view.
+//    }
+//}
 
 /*
 // Override to support rearranging the table view.
@@ -118,9 +181,272 @@
     if (!self.detailViewController) {
         self.detailViewController = [[DetailViewController alloc] initWithNibName:@"DetailViewController" bundle:nil];
     }
-    NSDate *object = _objects[indexPath.row];
-    self.detailViewController.detailItem = object;
+    
+    [self.detailViewController setUser:_user tweetIndexPath:indexPath];
     [self.navigationController pushViewController:self.detailViewController animated:YES];
+}
+
+
+#pragma mark - SearchBar Controller Methods
+
+- (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
+{
+    
+    if ([searchBar.text length] == 0) {
+        return;
+    }
+    self.username = searchBar.text;
+    searchBar.placeholder = _username;
+    
+    [self.searchDisplayController setActive:NO animated:YES];
+    
+    [self showHUD];
+    
+    [self fetchInfoForUser:_username];
+}
+
+#pragma mark - Tweeter Methods
+
+- (BOOL)userHasAccessToTwitter
+{
+    return [SLComposeViewController isAvailableForServiceType:SLServiceTypeTwitter];
+}
+
+- (void) fetchInfoForUser:(NSString *)username
+{
+    if ([self userHasAccessToTwitter]) {
+
+        //  Step 1:  Obtain access to the user's Twitter accounts
+        ACAccountType *twitterAccountType = [self.accountStore accountTypeWithAccountTypeIdentifier:ACAccountTypeIdentifierTwitter];
+        [self.accountStore
+         requestAccessToAccountsWithType:twitterAccountType options:NULL completion:^(BOOL granted, NSError *error) {
+             if (granted) {
+                 
+                 //  Step 2:  Create a request
+                 NSArray *twitterAccounts = [self.accountStore accountsWithAccountType:twitterAccountType];
+                 NSURL *url = [NSURL URLWithString:@"https://api.twitter.com/1.1/users/show.json"];
+                 
+                 NSDictionary *params = @{@"screen_name" : username};                 
+                 
+                 SLRequest *request = [SLRequest requestForServiceType:SLServiceTypeTwitter requestMethod:SLRequestMethodGET URL:url parameters:params];
+                 
+                 //  Attach an account to the request
+                 [request setAccount:[twitterAccounts lastObject]];
+                 
+                 //  Step 3:  Execute the request
+                 [request performRequestWithHandler:^(NSData *responseData, NSHTTPURLResponse *urlResponse, NSError *error) {
+
+                     if (responseData) {
+                         
+                         if (urlResponse.statusCode >= 200 && urlResponse.statusCode < 300) {
+                             
+                             
+                             NSError *jsonError;
+                             NSDictionary *userInfo = [NSJSONSerialization JSONObjectWithData:responseData
+                                                                                     options:NSJSONReadingAllowFragments
+                                                                                       error:&jsonError];
+
+                             if (userInfo) {
+                                 
+                                 User *user = [[User alloc] init];
+                                 if ([userInfo valueForKey:@"screen_name"]) {
+                                     user.screenName = [@"@" stringByAppendingString:[userInfo valueForKey:@"screen_name"]];
+                                 }
+                                
+                                 user.userName = [userInfo valueForKey:@"name"];
+                                 [user setImageURLString:[userInfo valueForKey:@"profile_image_url_https"]];
+                                 
+                                 _user = user;
+                                 
+                                 [self fetchTimelineForUser:_user.screenName];
+                               
+                             }
+                             else {
+                                 // Our JSON deserialization went awry
+//                                 NSLog(@"JSON Error: %@", [jsonError localizedDescription]);
+                                 [self.refreshControl endRefreshing];
+                                 [self hideHUD];
+                             }
+                         }
+                         else {
+                             // The server did not respond successfully... were we rate-limited?
+//                             NSLog(@"The response status code is %d", urlResponse.statusCode);
+                             [self.refreshControl endRefreshing];
+                             [self cleanAllView];
+                             
+                         }
+                     }
+                     else
+                     {
+//                         NSLog(@"error");
+                         [self.refreshControl endRefreshing];
+                         [self cleanAllView];
+                     }
+                 }];
+             }
+             else {
+                 // Access was not granted, or an error occurred
+                 NSLog(@"%@", [error localizedDescription]);
+                 [self.refreshControl endRefreshing];
+                 [self cleanAllView];
+             }
+         }];
+    }
+}
+
+
+- (void) fetchTimeline
+{
+    if (_username) {
+        [self fetchTimelineForUser:_username];
+    }
+    else
+    {
+        [self.refreshControl endRefreshing];
+    }
+}
+
+- (void)fetchTimelineForUser:(NSString *)username
+{
+    if (!username) {
+        NSLog(@"user name nil");
+        [self.refreshControl endRefreshing];
+        return;
+    }
+    
+    //  Step 0: Check that the user has local Twitter accounts
+    if ([self userHasAccessToTwitter]) {
+        
+        //  Step 1:  Obtain access to the user's Twitter accounts
+        ACAccountType *twitterAccountType = [self.accountStore
+                                             accountTypeWithAccountTypeIdentifier:
+                                             ACAccountTypeIdentifierTwitter];
+        [self.accountStore
+         requestAccessToAccountsWithType:twitterAccountType
+         options:NULL
+         completion:^(BOOL granted, NSError *error) {
+             if (granted) {
+                 //  Step 2:  Create a request
+                 NSArray *twitterAccounts =
+                 [self.accountStore accountsWithAccountType:twitterAccountType];
+                 NSURL *url = [NSURL URLWithString:@"https://api.twitter.com"
+                               @"/1.1/statuses/user_timeline.json"];
+                 
+                 NSDictionary *params = @{@"screen_name" : username,
+                                          @"include_rts" : @"0",
+                                          @"trim_user" : @"1" };
+                 
+                 
+                 SLRequest *request =
+                 [SLRequest requestForServiceType:SLServiceTypeTwitter
+                                    requestMethod:SLRequestMethodGET
+                                              URL:url
+                                       parameters:params];
+                 
+                 //  Attach an account to the request
+                 [request setAccount:[twitterAccounts lastObject]];
+                 
+                 //  Step 3:  Execute the request
+                 [request performRequestWithHandler:^(NSData *responseData,
+                                                      NSHTTPURLResponse *urlResponse,
+                                                      NSError *error) {
+                     if (responseData) {
+                         if (urlResponse.statusCode >= 200 && urlResponse.statusCode < 300) {
+                             
+                             NSError *jsonError;
+                             NSArray *timelineData = [NSJSONSerialization JSONObjectWithData:responseData
+                                                                                          options:NSJSONReadingAllowFragments
+                                                                                            error:&jsonError];
+                             
+                             if (timelineData) {
+//                                 NSLog(@"Timeline Response: %@\n", timelineData);
+                                 __block NSMutableArray *temp = [NSMutableArray arrayWithCapacity:[timelineData count]];
+                                 
+                                 [timelineData enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+                                     Tweet *tweet = [self parseDictionary:obj];
+                                     
+                                     [temp addObject:tweet];
+                                 }];
+                                 
+                                 
+                                 if (_user) {
+                                     _user.tweets = temp;
+                                 }
+                                                                  
+                                 dispatch_async(dispatch_get_main_queue(), ^{
+                                     self.title = _user.screenName;
+                                     [self.tableView reloadData];
+                                     [self.refreshControl endRefreshing];
+                                     [self hideHUD];
+                                 });
+                                 
+                                 
+                             }
+                             else {
+                                 // Our JSON deserialization went awry
+                                 NSLog(@"JSON Error: %@", [jsonError localizedDescription]);
+                                 [self.refreshControl endRefreshing];
+                                 [self cleanAllView];
+                             }
+                         }
+                         else {
+                             // The server did not respond successfully... were we rate-limited?
+                             NSLog(@"The response status code is %d", urlResponse.statusCode);
+                             [self.refreshControl endRefreshing];
+                             [self cleanAllView];
+
+                         }
+                     }
+                 }];
+             }
+             else {
+                 // Access was not granted, or an error occurred
+                 NSLog(@"%@", [error localizedDescription]);
+                 [self cleanAllView];
+             }
+         }];
+    }
+}
+
+
+- (Tweet *) parseDictionary:(NSDictionary *)dictionary
+{
+    Tweet *tweet = [[Tweet alloc] init];
+    
+    tweet.tweetID = [dictionary valueForKey:@"id"];
+    tweet.text = [dictionary valueForKey:@"text"];
+    
+    return tweet;
+}
+
+
+#pragma mark - Other Methods
+
+- (void) cleanAllView
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        _user = nil;
+        self.title = @"Cuenta";
+        
+        [self.searchDisplayController.searchBar setText:@""];
+        [self.searchDisplayController.searchBar setPlaceholder:@"input username"];
+        
+        [self.tableView reloadData];
+        
+        [self hideHUD];
+    });
+
+}
+
+- (void) showHUD
+{
+    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.navigationController.view animated:YES];
+    hud.labelText = @"Downloading tweets...";
+}
+
+- (void) hideHUD
+{
+    [MBProgressHUD hideAllHUDsForView:self.navigationController.view animated:YES];
 }
 
 @end
